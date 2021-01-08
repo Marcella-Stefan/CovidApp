@@ -381,6 +381,7 @@ public class LoginGUI extends javax.swing.JFrame {
 
     	} catch (Exception e) {
            JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!","Error",2);
+           closeConnection();
            System.exit(1);
         }
     }//GEN-LAST:event_jButton_loginActionPerformed
@@ -394,6 +395,7 @@ public class LoginGUI extends javax.swing.JFrame {
     private void JLabel_closeMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_JLabel_closeMouseClicked
         //This operatation is performed when click the close button,
         //and it closes the program.
+        closeConnection();
         System.exit(0);
     }//GEN-LAST:event_JLabel_closeMouseClicked
 

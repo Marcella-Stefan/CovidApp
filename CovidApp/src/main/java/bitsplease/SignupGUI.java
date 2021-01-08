@@ -423,6 +423,7 @@ public class SignupGUI extends javax.swing.JFrame {
         } catch (Exception e) {
             JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!"
                     , "Signup error", 2);
+            closeConnection();
             //if an unexpected error appear we want to close the program
             System.exit(1);
         }
@@ -431,6 +432,7 @@ public class SignupGUI extends javax.swing.JFrame {
     private void JLabel_closeMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_JLabel_closeMouseClicked
         //This operatation is performed when click the close button,
         //and it closes the program.
+        closeConnection();
         System.exit(0);
     }//GEN-LAST:event_JLabel_closeMouseClicked
 
