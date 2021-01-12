@@ -2,9 +2,12 @@ package bitsplease;
 
 import java.awt.Color;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -324,27 +327,24 @@ public class LoginGUI extends javax.swing.JFrame {
         // TODO add your handling code here:
     }//GEN-LAST:event_jPasswordFieldActionPerformed
 
-    private ResultSet userAuthentication(String ID, String pass) throws SQLException {
-        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                ResultSet.CONCUR_UPDATABLE);
-    	ResultSet myRs = myStmt.executeQuery("select * from Accounts where id = '" + ID 
-                + "' and pass = '" + pass + "'");
+    private ResultSet userAuthentication(String ID, String pass) 
+            throws SQLException, InputException {
+
+        PreparedStatement prStmt = conn.prepareStatement("SELECT * FROM Accounts WHERE id = ?" 
+                + " AND pass = ?");
+
+        prStmt.setString(1, ID);
+        prStmt.setString(2, pass);
+        
+    	ResultSet myRs = prStmt.executeQuery();
+        if(!myRs.next()) {
+            throw new InputException("You are not registered. Create an account first!");
+        }
+
         return myRs;
     }
 
-    private void checkIfUserExists(ResultSet myRs) throws InputException, SQLException {
-        if(!myRs.next()) {
-            JOptionPane.showMessageDialog(null, "You are not registered. Create an account first!"
-                    ,"Login error",2);
-            jFormattedTextFieldID.setValue(null);
-    	    jPasswordField.setText("");
-            throw new InputException();
-        }
-    }
-
-    private void openMenu(ResultSet myRs) throws SQLException {
-        Account acc = new Account(myRs.getString("id"), myRs.getString("Email"), 
-                myRs.getString("Pass"));
+    private void openMenu(Account acc) throws SQLException {
     	Menu menu = new Menu(acc);
     	menu.setVisible(true);
     	menu.pack();
@@ -352,38 +352,43 @@ public class LoginGUI extends javax.swing.JFrame {
     	this.dispose();
     }
 
-    public void closeConnection() {
+    private void closeConnection() {
         try {
            conn.close();
        } catch (SQLException e) {
+           Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
        }
     }
+
+    private void deleteOldEntries() throws SQLException {
+        // Delete the entries that are older than 12 days
+        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
+              ResultSet.CONCUR_UPDATABLE);
+        myStmt.executeUpdate("DELETE FROM EntryInfos WHERE DATEDIFF(CURDATE(), "
+              + "DATE_FORMAT(DepartureTime, '%Y-%m-%d')) > 12");
+    }
+
     private void jButton_loginActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_loginActionPerformed
 
     	try {
-            // Delete the entries that are older than 12 days
-            Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                  ResultSet.CONCUR_UPDATABLE);
-            myStmt.executeUpdate("DELETE FROM EntryInfos WHERE DATEDIFF(CURDATE(), "
-                    + "DATE_FORMAT(DepartureTime, '%Y-%m-%d')) > 12");
+            deleteOldEntries();
 
             jFormattedTextFieldID.requestFocusInWindow();
             String ID = jFormattedTextFieldID.getText();
             String pass = String.valueOf(jPasswordField.getPassword());
 
             ResultSet myRs = userAuthentication(ID, pass);
-            checkIfUserExists(myRs);
-            openMenu(myRs);
+            Account acc = new Account(myRs.getString("id"), myRs.getString("Email"), 
+                myRs.getString("Pass"));
             closeConnection();
+            openMenu(acc);
         } catch (SQLException e) {
-
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
         } catch (InputException e) {
-
-    	} catch (Exception e) {
-           JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!","Error",2);
-           closeConnection();
-           System.exit(1);
-        }
+            JOptionPane.showMessageDialog(null, e.getMessage() , "Signup Error", 2);
+            jFormattedTextFieldID.setValue(null);
+    	    jPasswordField.setText("");
+    	}
     }//GEN-LAST:event_jButton_loginActionPerformed
 
     private void JLabel_minimizeMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_JLabel_minimizeMouseClicked
@@ -415,15 +420,19 @@ public class LoginGUI extends javax.swing.JFrame {
        CreateNewAcc.setBorder(null);
     }//GEN-LAST:event_CreateNewAccMouseExited
 
-    private void CreateNewAccMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_CreateNewAccMouseClicked
-       //This operation is performed when we click the Create an account button
-       //and it opens the Signup window (frame) by instanciate it and closes the Login window(frame.
+    private void openSignup() {
        SignupGUI sign = new SignupGUI();
        sign.setVisible(true);
        sign.pack();
        sign.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
        this.dispose();
+    }
+
+    private void CreateNewAccMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_CreateNewAccMouseClicked
+       // This operation is performed when we click the Create an account button
+       // and it opens the Signup window (frame) by instanciate it and closes the Login window(frame).
        closeConnection();
+       openSignup();
     }//GEN-LAST:event_CreateNewAccMouseClicked
 
     private void WindowMoverLabelMouseDragged(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_WindowMoverLabelMouseDragged
@@ -441,7 +450,7 @@ public class LoginGUI extends javax.swing.JFrame {
        yMouse = evt.getY();
     }//GEN-LAST:event_WindowMoverLabelMousePressed
 
-    public static String instructions() {
+    private static String instructions() {
         return "The goal of our application is to inform its users via email in case they had contacts\n"
                + "with other users that have registered themselves as confirmed cases.\n\n"
                + "In order to use our application, you first need to Sign up. The only personal details\n"
@@ -456,6 +465,7 @@ public class LoginGUI extends javax.swing.JFrame {
                + "the Menu.";
 
     }
+
     public static void main(String args[]) {
         try {
             for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {

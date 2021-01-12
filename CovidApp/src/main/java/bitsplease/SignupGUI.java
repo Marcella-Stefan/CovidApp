@@ -5,6 +5,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -307,11 +309,19 @@ public class SignupGUI extends javax.swing.JFrame {
          jPasswordField.setText("");
     }
 
+    private void openMenu(Account acc) {
+        Menu menu = new Menu(acc);
+    	menu.setVisible(true);
+    	menu.pack();
+    	menu.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    	this.dispose();
+    }
+
     private void checkForEmptyTextFields(String ID, String email, String pass)
             throws InputException{
         if(jFormattedTextField_ID.getText().equals("         ") || JText_email.getText().isEmpty()
                 || String.valueOf(jPasswordField.getPassword()).isEmpty()) {
-            throw new InputException("All fields must be completed");
+            throw new InputException("All fields must be completed!");
         }
     }
 
@@ -331,18 +341,34 @@ public class SignupGUI extends javax.swing.JFrame {
 	}
     }
 
-    private ResultSet checksIfIDExists(String ID) throws SQLException {
+    private void openLogin() {
+        LoginGUI log = new LoginGUI();
+        log.setVisible(true);
+        log.pack();
+        log.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        this.dispose();
+    }
+
+    private void checksIfTheIDExists(String ID) throws SQLException, InputException {
         Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
                 ResultSet.CONCUR_UPDATABLE);
     	ResultSet myRs = myStmt.executeQuery("select * from Accounts where id = '" + ID + "'");
-        return myRs;
+        if (myRs.next()){
+            // id is unique so if it already exists in the database that means that the user
+            // is already registered, thats why we open the login window.
+            closeConnection();
+            openLogin();
+            throw new InputException("You are already registered! Please login");
+        }
     }
 
-    private ResultSet checksIfEmailExists(String email) throws SQLException {
+    private void checksIfTheEmailExists(String email) throws SQLException, InputException {
         Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
                 ResultSet.CONCUR_UPDATABLE);
     	ResultSet myRs = myStmt.executeQuery("select * from Accounts where email = '" + email + "'");
-        return myRs;
+        if(myRs.next()) {
+            throw new InputException("This email is already in use");
+        }
     }
 
     private void newUserCreation(Account acc) throws SQLException {
@@ -352,56 +378,33 @@ public class SignupGUI extends javax.swing.JFrame {
                         + acc.getId() + "', '" + acc.getEmail() + "', '" + acc.getPass() + "')");
     }
 
-    private void createsUserIfNotExists(String ID, String email, String pass) 
-            throws SQLException {
-            if(!checksIfIDExists(ID).next() && !checksIfEmailExists(email).next()) {
-                Account acc = new Account(ID, email, pass);
-                newUserCreation(acc);
-                Menu menu = new Menu(acc);
-    	    	menu.setVisible(true);
-    	    	menu.pack();
-    	    	menu.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-    	    	this.dispose();
-
-                //Just to stop the flow of the program.
-                throw new SQLException();
-            } 
+    private void createsUser(String ID, String email, String pass) throws SQLException {
+        Account acc = new Account(ID, email, pass);
+        newUserCreation(acc);
+        closeConnection();
+        openMenu(acc);
     }
 
-    private void checksIfTheIDExists(String ID) throws SQLException, InputException {
-        if (checksIfIDExists(ID).next()){
-            //id is unique so if it already exists in the database that means that the user
-            //is already registered, thats why we open the login window.
-            LoginGUI log = new LoginGUI();
-            log.setVisible(true);
-            log.pack();
-            log.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            this.dispose();
-            throw new InputException("You are already registered! Please login");
-        }
-    }
-
-    private void checksIfTheEmailExists(String email) throws SQLException, InputException {
-        if(checksIfEmailExists(email).next()) {
-            throw new InputException("This email is already in use");
-        }
-    }
-
-    public void closeConnection() {
+    private void closeConnection() {
         try {
            conn.close();
-       } catch (SQLException e) {
-       }
+        } catch (SQLException ex) {
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    private void deleteOldEntries() throws SQLException {
+        // Delete the entries that are older than 12 days
+        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
+              ResultSet.CONCUR_UPDATABLE);
+        myStmt.executeUpdate("DELETE FROM EntryInfos WHERE DATEDIFF(CURDATE(), "
+              + "DATE_FORMAT(DepartureTime, '%Y-%m-%d')) > 12");
     }
 
     private void jButton_signupActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_signupActionPerformed
 
         try {
-            // Delete the entries that are older than 12 days
-            Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                  ResultSet.CONCUR_UPDATABLE);
-            myStmt.executeUpdate("DELETE FROM EntryInfos WHERE DATEDIFF(CURDATE(),"
-                    + "DATE_FORMAT(DepartureTime, '%Y-%m-%d')) > 12");
+            deleteOldEntries();
 
             jFormattedTextField_ID.requestFocusInWindow();
             String ID = jFormattedTextField_ID.getText();
@@ -411,21 +414,14 @@ public class SignupGUI extends javax.swing.JFrame {
             checkForEmptyTextFields(ID, email, pass);
             checkForInvalidPass(pass);
             checkForInvalidEmail(email);
-            createsUserIfNotExists(ID, email, pass);
             checksIfTheIDExists(ID);
             checksIfTheEmailExists(email);
-            closeConnection();
+            createsUser(ID, email, pass);
         } catch (InputException e) {
             JOptionPane.showMessageDialog(null, e.getMessage() , "Signup error", 2);
             clearTextFields();
-        } catch (SQLException e) {
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!"
-                    , "Signup error", 2);
-            closeConnection();
-            //if an unexpected error appear we want to close the program
-            System.exit(1);
+        } catch (SQLException ex) {
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, ex);
         }
     }//GEN-LAST:event_jButton_signupActionPerformed
 
@@ -491,12 +487,8 @@ public class SignupGUI extends javax.swing.JFrame {
     private void LoginLabelMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_LoginLabelMouseClicked
        //This operation is performed when we click the Login button
        //and it opens a Login window(frame) by instanciate it and closes the Signup window(frame)
-       LoginGUI log = new LoginGUI();
-       log.setVisible(true);
-       log.pack();
-       log.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-       this.dispose();
        closeConnection();
+       openLogin();
     }//GEN-LAST:event_LoginLabelMouseClicked
 
     private void MoveWindowPanelMouseDragged(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_MoveWindowPanelMouseDragged

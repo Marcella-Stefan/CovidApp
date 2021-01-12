@@ -1,11 +1,12 @@
 package bitsplease;
 
 import java.awt.Color;
-import java.util.ArrayList;
-import java.util.List;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import javax.mail.MessagingException;
-import javax.mail.internet.AddressException;
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -16,6 +17,8 @@ public class ContactUs extends javax.swing.JFrame {
 
     int xMouse;
     int yMouse;
+
+    private final Connection conn = Account.getConnection();
 
     private final Account acc;
 
@@ -278,43 +281,48 @@ public class ContactUs extends javax.swing.JFrame {
     	menu.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     	this.dispose();
     }
-    public void sendContactEmail(List<String> email, String subject, String body)
-            throws AddressException, MessagingException {
-    	Email mail = new Email(email);
-	mail.setupServerProperties();
-	mail.draftEmail(subject, body);
-	mail.sendEmail();
+
+    public void uploadTheMessToDB(String body) throws SQLException {
+        PreparedStatement myStmt = conn.prepareStatement("INSERT INTO EmailsTowardUs VALUES (?)");
+        myStmt.setString(1, body);
+        myStmt.execute();
     }
 
-    /*When someone presses the send button what actually happens is that we
-     *send an email to our selves that contains the message he want to send
-     *and we add his email in the first line so that we know where to reply
-     *(We cant send the email from his email bec we dont know the password).
+    public void closeConnection() {
+        try {
+           conn.close();
+       } catch (SQLException ex) { 
+            Logger.getLogger(ContactUs.class.getName()).log(Level.SEVERE, null, ex);
+        } 
+    }
+
+    /* When someone presses the send button what actually happens is that we
+     * send an email to our selves that contains the message he want to send
+     * and we add his email in the first line so that we know where to reply
+     * (We cant send the email from his email bec we dont know the password).
      */
     private void jButton_SendActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_SendActionPerformed
         String subject = jTextField1.getText();
         String body = jTextArea1.getText();
 
-        //I add the email of the user that sends the email, in the Body of the email
-        //so i can know to whom i have to reply.
-        body = "Email from: " + acc.getEmail() + "\n" + body;
-
-        //I create a list that contains the email of the app
-        //So i can call the method sendContactEmail();
-        List<String> email = new ArrayList<>();
-        email.add("Informant4565@gmail.com");
+        // I add the email of the user that sends the email, in the Body of the email
+        // so i can know to whom i have to reply.
+        body = "Email from: " + acc.getEmail() + "\n\nAbout: " + subject + "\n\n" + body;
 
         try {
-            sendContactEmail(email, subject, body);
-            JOptionPane.showMessageDialog(null, "We will reply to you as soon as possible.\n                  Stay safe!","Confirmation message",1);
+            uploadTheMessToDB(body);
+            JOptionPane.showMessageDialog(null, "We will reply to you as soon as possible."
+                    + "\n                  Stay safe!","Confirmation message",1);
+            closeConnection();
             openMenu();
-        } catch (MessagingException ex) {
-            JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!","Error",2);
+        } catch (SQLException e) {
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
         }
     }//GEN-LAST:event_jButton_SendActionPerformed
 
     private void BackToMenuMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_BackToMenuMouseClicked
         //This operation is performed when we click the Back to the Menu button.
+        closeConnection();
         openMenu();
     }//GEN-LAST:event_BackToMenuMouseClicked
 
@@ -333,6 +341,7 @@ public class ContactUs extends javax.swing.JFrame {
     private void JLabel_closeMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_JLabel_closeMouseClicked
         //This operatation is performed when click the close button,
         //and it closes the program.
+        closeConnection();
         System.exit(0);
     }//GEN-LAST:event_JLabel_closeMouseClicked
 

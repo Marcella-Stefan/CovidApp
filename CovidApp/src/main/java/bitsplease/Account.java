@@ -8,15 +8,15 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import javax.mail.MessagingException;
-import javax.mail.internet.AddressException;
 import javax.swing.JOptionPane;
 
 /**
   * This class describe an <i>account</i> of a user and also contains the methods in order to find the contacts of 
-  * a case and send them @see Email
+  * a case and save theirs @see Email .
   */
 public class Account {
 
@@ -86,7 +86,7 @@ public class Account {
      * @return a ResultSet that contains all the entries of the case.
      * @throws SQLException throws SQLException.
      */
-    public ResultSet getCaseEntries() throws SQLException {
+    private ResultSet getCaseEntries() throws SQLException {
     	Statement myStmt = conn.createStatement();
 	ResultSet myRs = myStmt.executeQuery("select * from EntryInfos where id = '" + id + "'");
 	return myRs;
@@ -98,7 +98,7 @@ public class Account {
      * @return a PreparedStatement that can be used to find all the contacts of a single case entry.
      * @throws SQLException throws SQLException.
      */
-    public PreparedStatement getEntryContacts() throws SQLException {
+    private PreparedStatement getEntryContacts() throws SQLException {
         //The HOUR(TIMEDIFF('Datetime', 'Datetime')) >= 1 is needed in case the contact is exactly 1, 2, 3 hours etc...
         PreparedStatement myStmt = conn.prepareStatement("SELECT Email FROM EntryInfos WHERE (id != ? AND place = ? AND address = ? AND TK = ? AND ("
 		    	+ "( ArrivalTime < ? AND DepartureTime > ? AND ( MINUTE(TIMEDIFF(DepartureTime, ?)) >= 1 OR HOUR(TIMEDIFF(DepartureTime, ?)) >= 1 ) ) OR\r\n"
@@ -119,7 +119,7 @@ public class Account {
      * @param departureTime the time that the user of the account leave that place.
      * @throws SQLException throws SQLException.
      */
-    public void initPrepStmt(PreparedStatement myStmt, String id, String place, String address, int tk,
+    private void initPrepStmt(PreparedStatement myStmt, String id, String place, String address, int tk,
     		String arrivalTime, String departureTime) throws SQLException {
 
     	myStmt.setString(1, id);
@@ -147,7 +147,7 @@ public class Account {
      * @return the list it receives with the mails from the ResultSet added.
      * @throws SQLException throws SQLException.
      */
-    public List<String> addEmailsOfContacts(ResultSet rs, List<String> emails) throws SQLException {
+    private List<String> addEmailsOfContacts(ResultSet rs, List<String> emails) throws SQLException {
     	while(rs.next()) {
             emails.add(rs.getString("email"));
     	}
@@ -161,7 +161,7 @@ public class Account {
      * @return a list that contains the mails of all the users that had contacts with the case.
      * @throws SQLException throws SQLException.
      */
-    public List<String> getEmailOfContacts(ResultSet myRs) throws SQLException {
+    private List<String> getEmailOfContacts(ResultSet myRs) throws SQLException {
     	List<String> emails = new ArrayList<>();
         PreparedStatement myStmt = getEntryContacts();
 
@@ -188,7 +188,7 @@ public class Account {
      * @param emails a list that contain all the mails of the case contacts.
      * @return the list it receives without duplicates.
      */
-    public List<String> removeDuplicateEmails(List<String> emails) {
+    private List<String> removeDuplicateEmails(List<String> emails) {
     	List<String> emailsWithoutDuplicates = emails.stream()
 	    	     .distinct()
 	    	     .collect(Collectors.toList());
@@ -199,7 +199,7 @@ public class Account {
      * Shows a message if the list is empty.
      * @param emailsOfContacts a list that contains the email of the users that had contacts with a case.
      */
-    public void messageIfNoContacts(List<String> emailsOfContacts) {
+    private void messageIfNoContacts(List<String> emailsOfContacts) {
         if (emailsOfContacts.isEmpty()) {
             JOptionPane.showMessageDialog(null, "You haven't contact with any of our registered members!\n                         Thank you for help!");
             System.exit(0);
@@ -207,49 +207,27 @@ public class Account {
     }
 
     /**
-     * Get the subject of the informative email.
-     * @return the email subject.
+     * Uploads the Email of the users that we must inform in a database.
+     * @param emailsWithoutDuplicates
+     * @throws SQLException 
      */
-    public String mailSubject() {
-        return "CovidApp Warning";
-    }
-
-    /**
-     * Contain the body of the informative email.
-     * @return the email body.
-     */
-    public String mailBody() {
-        return "Dear user,\n"
-                + "With this email we would like to inform you that you have probably been "
-                + "in contact with a confirmed case of COVID-19. As we cannot know your "
-                + "exact degree of exposure to the virus, we would suggest that you get "
-                + "tested for SARS-CoV-2.\n"
-                + "Thank you for the preference.";
-    }
-
-    /** 
-     * Sends the emails to the contacts of the case.
-     * @param emailsWithoutDuplicates a list that contain the emails without duplicates.
-     * @throws AddressException throws AddressException.
-     * @throws MessagingException throws MessagingException.
-     */
-    public void sendInformativeEmails(List<String> emailsWithoutDuplicates) 
-            throws AddressException, MessagingException {
-    	Email mail = new Email(emailsWithoutDuplicates);
-	mail.setupServerProperties();
-	mail.draftEmail(mailSubject(), mailBody());
-	mail.sendEmail();
+    private void uploadEmailsToTheDB(List<String> emailsWithoutDuplicates) throws SQLException {
+        PreparedStatement myStmt = conn.prepareStatement("INSERT INTO Emails VALUES (?)");
+        for (int i = 0; i < emailsWithoutDuplicates.size(); i++) {
+            myStmt.setString(1, emailsWithoutDuplicates.get(i));
+            myStmt.executeUpdate();
+        }
     }
 
     /**
      * Closes the Connection with the Database.
      */
-    public void closeConnection() {
-        try {
-           conn.close();
-       } catch (SQLException e) {
-
-       }
+    private void closeConnection() {
+        try {  
+            conn.close();
+        } catch (SQLException ex) {
+            Logger.getLogger(Account.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
     /**
@@ -262,16 +240,10 @@ public class Account {
             List<String> emailsOfContacts = getEmailOfContacts(caseEntries);
             messageIfNoContacts(emailsOfContacts);
             List<String> emailsWithoutDuplicates = removeDuplicateEmails(emailsOfContacts);
-            sendInformativeEmails(emailsWithoutDuplicates);
+            uploadEmailsToTheDB(emailsWithoutDuplicates);
             closeConnection();
         } catch (SQLException e) {
-
-	} catch (MessagingException e) {
-
-	} catch (Exception e) {
-            JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!","Error",2);
-            //exit(0) is used when we close the program without having an error.
-            System.exit(1);
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
 	}
     }
 }

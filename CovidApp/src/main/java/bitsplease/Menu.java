@@ -2,9 +2,12 @@ package bitsplease;
 
 import java.awt.Color;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -386,9 +389,10 @@ public class Menu extends javax.swing.JFrame {
     }
 
     private void checksPlaceAddress() throws InputException {
-       if(JText_place.getText().isEmpty()) {
-            throw new InputException("The place field cannot be empty.");
+       if(JText_place.getText().isEmpty() || JText_address.getText().isEmpty()) {
+            throw new InputException("The place and the address fields cannot be empty.");
        }
+ 
        if(!JText_address.getText().matches(".*\\d.*")) {
            throw new InputException("Invalid address! It must contain the number.");
        }
@@ -398,41 +402,51 @@ public class Menu extends javax.swing.JFrame {
     // add entries that happend from 00:00 till 02:00, we can add them to the database
     // only after 02:00. (We do not need to take care of that because of the quarantine
     // restrictions).
-    public void checksDate(String dateTime) throws SQLException, InputException {
-        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                ResultSet.CONCUR_UPDATABLE);
-        ResultSet rs = myStmt.executeQuery("select (DATEDIFF(CURDATE(), DATE_FORMAT('" + dateTime 
-                + "', '%Y-%m-%d')) >= 12 OR DATE_FORMAT('" + dateTime 
-                + "', '%Y-%m-%d') > CURDATE());");
+    private void checkIfDateIsRecent(String dateTime) throws SQLException, InputException {
+        PreparedStatement rsStmt = conn.prepareStatement("select (DATEDIFF(CURDATE(), DATE_FORMAT(?, '%Y-%m-%d'))"
+                + " >= 12 OR DATE_FORMAT(?, '%Y-%m-%d') > CURDATE())");
+        rsStmt.setString(1, dateTime);
+        rsStmt.setString(2, dateTime);
+        ResultSet rs = rsStmt.executeQuery();
         //1 => true , 0 => false
         rs.first();
         if(rs.getString(1).equals("1")){
             throw new InputException("Invalid dates!");
         }
+        
     }
 
-    public void checksDates(String arrivalTime, String departureTime) 
+    public void checkDates(String arrivalTime, String departureTime) 
             throws SQLException, InputException {
+
         //Checks if departure time is after the arrival time.
-        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                ResultSet.CONCUR_UPDATABLE);
-        ResultSet rs = myStmt.executeQuery("SELECT '" + arrivalTime + "' >= '" + departureTime + "'");
+        PreparedStatement myStmt = conn.prepareStatement("SELECT ? >= ?");
+        myStmt.setString(1, arrivalTime);
+        myStmt.setString(2, departureTime);
+        ResultSet myRs = myStmt.executeQuery("SELECT ? >= ?");
         //1 => true , 0 => false
-        rs.first();
-        if(rs.getString(1).equals("1")){
+        myRs.first();
+        if(myRs.getString(1).equals("1")){
             throw new InputException("The arrival time cannot be after the departure time!");
         }
     }
 
     private void addEntry(Account acc, String place, String address, int TK,
             String arrivalTime, String departureTime) throws SQLException {
-        Statement myStmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, 
-                ResultSet.CONCUR_UPDATABLE);
-        myStmt.executeUpdate("insert into EntryInfos (ID, Email, Pass, Place, Address,"
-                + " TK, ArrivalTime, DepartureTime) " + "values ('" + acc.getId()
-                + "', '" + acc.getEmail() + "', '" + acc.getPass() + "', '" + place
-                + "', '" + address + "', '" + TK + "', '" + arrivalTime + "', '" + departureTime 
-                + "');");
+
+        PreparedStatement prStmt = conn.prepareStatement("INSERT INTO EntryInfos (ID, Email, Pass, Place, Address,"
+                + " TK, ArrivalTime, DepartureTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+
+        prStmt.setString(1, acc.getId());
+        prStmt.setString(2, acc.getEmail());
+        prStmt.setString(3, acc.getPass());
+        prStmt.setString(4, place);
+        prStmt.setString(5, address);
+        prStmt.setInt(6, TK);
+        prStmt.setString(7, arrivalTime);
+        prStmt.setString(8, departureTime);
+
+        prStmt.executeQuery();
     }
 
     private void jButton_SumbitEntryActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_SumbitEntryActionPerformed
@@ -446,29 +460,26 @@ public class Menu extends javax.swing.JFrame {
             String departureTime = jFormattedTextField_DepTime.getText();
 
             checksPlaceAddress();
-            checksDate(arrivalTime);
-            checksDate(departureTime);
-            checksDates(arrivalTime, departureTime);
+            checkIfDateIsRecent(arrivalTime);
+            checkIfDateIsRecent(departureTime);
+            checkDates(arrivalTime, departureTime);
             addEntry(acc, place, address, TK, arrivalTime, departureTime);
             JOptionPane.showMessageDialog(null, "Successfull entry");
             clearTextFields();          
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(null, "Its mandatory to fill in the postal code field!"
+            // When postal code is empty.
+            JOptionPane.showMessageDialog(null, "The postal code field cannot be empty."
                     , "Error", 2);
             clearTextFields();
         } catch (SQLException e) {
-
+            Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
         } catch (InputException e) {
             JOptionPane.showMessageDialog(null, e.getMessage() , "Error", 2);
             clearTextFields();
         } catch (NullPointerException e) {
+            // When the arrivalTime or departureTime fields are empty.
             JOptionPane.showMessageDialog(null, "Invalid dates!" , "Error", 2);
             clearTextFields();
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, "We are sorry, something went wrong!"
-                    , "Error", 2);
-            closeConnection();
-            System.exit(1);
         }
     }//GEN-LAST:event_jButton_SumbitEntryActionPerformed
 
@@ -537,25 +548,31 @@ public class Menu extends javax.swing.JFrame {
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
         acc.testedPositive();
         JOptionPane.showMessageDialog(null, "Thank you for your help!");
+        closeConnection();
         this.dispose();
     }//GEN-LAST:event_jButton1ActionPerformed
 
-    public void closeConnection() {
+    private void closeConnection() {
         try {
            conn.close();
        } catch (SQLException e) {
+           Logger.getLogger(SignupGUI.class.getName()).log(Level.SEVERE, null, e);
        }
     }
 
-    private void ContactUsMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_ContactUsMouseClicked
-        //This operation is performed when we click the Contact Us button
-        //And it opens a ContactUs window(frame) by instanciate it and closes the Menu window(frame).
+    private void openContactUs() {
         ContactUs contUs = new ContactUs(acc);
         contUs.setVisible(true);
         contUs.pack();
         contUs.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.dispose();
+    }
+
+    private void ContactUsMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_ContactUsMouseClicked
+        //This operation is performed when we click the Contact Us button
+        //And it opens a ContactUs window(frame) by instanciate it and closes the Menu window(frame).
         closeConnection();
+        openContactUs();
     }//GEN-LAST:event_ContactUsMouseClicked
 
     private void ContactUsMouseEntered(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_ContactUsMouseEntered
