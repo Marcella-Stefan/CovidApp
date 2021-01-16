@@ -16,11 +16,10 @@ import javax.swing.JOptionPane;
 
 /**
  * This class send the emails every 5 minutes.
- * @author Giannis
  */
 public class EmailSender {
 
-    private static final Connection conn = getConnection();
+    private static Connection conn = getConnection();
 
     /**
      * Get a Connection for the Database.
@@ -154,12 +153,26 @@ public class EmailSender {
     }
 
     /**
+     * Checks if the database connection is alive.
+     */
+    public static void checkConnection() {
+        try {
+            if ((conn == null) || !conn.isValid(1)) {
+                conn = getConnection();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            conn = null;
+        }
+    }
+    /**
      * Executes the methods of the class in order to send the emails.
      * @param args 
      */
     public static void main(String[] args) {
         try {
             while (true) {
+                checkConnection();
                 List<String> emailsFromDB = getEmails();
                 if (!emailsFromDB.isEmpty()) {
                     List<String> emailsWithoutDuplicates = removeDuplicateEmails(emailsFromDB);
