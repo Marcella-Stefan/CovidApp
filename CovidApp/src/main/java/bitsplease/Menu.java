@@ -423,7 +423,7 @@ public class Menu extends javax.swing.JFrame {
         PreparedStatement myStmt = conn.prepareStatement("SELECT ? >= ?");
         myStmt.setString(1, arrivalTime);
         myStmt.setString(2, departureTime);
-        ResultSet myRs = myStmt.executeQuery("SELECT ? >= ?");
+        ResultSet myRs = myStmt.executeQuery();
         //1 => true , 0 => false
         myRs.first();
         if(myRs.getString(1).equals("1")){
